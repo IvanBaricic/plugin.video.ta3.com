@@ -53,6 +53,7 @@ class TA3ContentProvider(ContentProvider):
         result.append(item)
         result.append(self.dir_item('Spravodajstvo', self.base_url + 'archiv.html#mycat'))
         result.append(self.dir_item('Publicistika', self.base_url + 'archiv/publicistika.html#mycat'))
+        result.append(self.dir_item('Tlačové besedy', self.base_url + 'archiv/tlacove-besedy.html#mycat'))
         return result
 
     def list(self, url):
@@ -74,12 +75,12 @@ class TA3ContentProvider(ContentProvider):
             result.append(self.dir_item(url=url, type='new'))
             d = date.today()
             result.append(self.dir_item('[B]Podľa dátumu[/B]',
-                "#date#%d#%d#%s" %(d.year, d.month, url)))
+                "#date#%d#%d#%s" % (d.year, d.month, url)))
             result.extend(self.list_categories(url))
             return result
 
         if purl.fragment == "categories":
-            return self.list_categories("http://"+ purl.netloc + purl.path)
+            return self.list_categories("http://" + purl.netloc + purl.path)
         return self.list_videos(self._url(url))
 
     def list_categories(self, url):
@@ -89,6 +90,8 @@ class TA3ContentProvider(ContentProvider):
             start = '<select id="articleArchivFilterPublicistika-c"'
         elif 'archiv.html' in url:
             start = '<select id="articleArchivFilterSpravodajstvo-c"'
+        elif 'tlacove-besedy.html' in url:
+            start = '<select id="articleArchivFilterBesedy-c"'
         else:
             self.error("_list_categories: unknown category url: %s" % url)
             return []
@@ -103,7 +106,7 @@ class TA3ContentProvider(ContentProvider):
     def list_videos(self, url):
         result = []
         page = util.request(url)
-        data = util.substr(page, '<div class="articles">','<div class="paginator">')
+        data = util.substr(page, '<div class="articles">', '<div class="paginator">')
         listing_iter_re = r"""
             <article\ class=\"row\">.+?
                 <a\ href=\"(?P<url>[^\"]+)\"><i\ class=\"ta3-icon-video\"[^>]+>[^>]+>(?P<title>[^<]+)</a>.+?
@@ -111,15 +114,15 @@ class TA3ContentProvider(ContentProvider):
         for m in re.finditer(listing_iter_re, data, re.DOTALL | re.VERBOSE):
             item = self.video_item()
             item['title'] = m.group('title').strip()
-            #item['title'] = "%s (%s)" % (m.group('title').strip(), m.group('date').strip())
+            # item['title'] = "%s (%s)" % (m.group('title').strip(), m.group('date').strip())
             item['url'] = m.group('url')
             self._filter(result, item)
-        pager_data = util.substr(page,'<div class="paginator">', '</div>')
+        pager_data = util.substr(page, '<div class="paginator">', '</div>')
         next_page_match = re.search(r'<li class="next"><a href="(?P<url>[^"]+)', pager_data)
         if next_page_match:
             item = self.dir_item()
             item['type'] = 'next'
-            next_url = next_page_match.group('url').replace('&amp;','&')
+            next_url = next_page_match.group('url').replace('&amp;', '&')
             # ta3.com gives invalid page urls for publicistika
             if "publicistika.html" in url:
                 purl = urlparse.urlparse(url)
@@ -158,7 +161,6 @@ class TA3ContentProvider(ContentProvider):
             url += "?" + urllib.urlencode(params)
         return url
 
-
     def date(self, year, month, url):
         result = []
         today = date.today()
@@ -195,20 +197,20 @@ class TA3ContentProvider(ContentProvider):
         resolved = []
         data = util.request(self._url(item['url']))
         video_id = re.search("LiveboxPlayer.archiv\(.+?videoId:\s*'([^']+)'", data, re.DOTALL).group(1)
-        #print "video_id", video_id
+        # print "video_id", video_id
         player_data = util.request("http://embed.livebox.cz/ta3_v2/vod-source.js", {'Referer':self._url(item['url'])})
-        #print "player_data", player_data
+        # print "player_data", player_data
         url_format = re.search(r'my.embedurl = \[\{"src" : "([^"]+)"', player_data).group(1)
-        #print "url_format", url_format
+        # print "url_format", url_format
         manifest_url = "https:" + url_format.format(video_id)
-        #print "manifest_url", manifest_url
+        # print "manifest_url", manifest_url
         manifest = util.request(manifest_url)
         print "manifest", manifest
         for m in re.finditer('#EXT-X-STREAM-INF:PROGRAM-ID=\d+,BANDWIDTH=(?P<bandwidth>\d+).*?(,RESOLUTION=(?P<resolution>\d+x\d+))?\s(?P<chunklist>[^\s]+)', manifest, re.DOTALL):
             item = self.video_item()
             item['surl'] = item['title']
             item['quality'] = m.group('bandwidth')
-            item['url'] = manifest_url[:manifest_url.rfind('/')+1] + m.group('chunklist')
+            item['url'] = manifest_url[:manifest_url.rfind('/') + 1] + m.group('chunklist')
             resolved.append(item)
         resolved = sorted(resolved, key=lambda x:int(x['quality']), reverse=True)
         if len(resolved) == 3:
@@ -224,12 +226,12 @@ class TA3ContentProvider(ContentProvider):
         resolved = []
         data = util.request(self._url(item['url']))
         player_data = util.request("http://embed.livebox.cz/ta3/live-source.js", {'Referer':self._url(item['url'])})
-        #print "player_data", player_data
+        # print "player_data", player_data
         for m_manifest in re.finditer(r'\{"src"\s*:\s*"([^"]+)"\s*\}', player_data, re.DOTALL):
             manifest_url = m_manifest.group(1)
-            #print "manifest_url", manifest_url
+            # print "manifest_url", manifest_url
             manifest = util.request(manifest_url)
-            #print "manifest", manifest
+            # print "manifest", manifest
             for m in re.finditer('#EXT-X-STREAM-INF:PROGRAM-ID=\d+,BANDWIDTH=(?P<bandwidth>\d+)(,RESOLUTION=(?P<resolution>\d+x\d+))?.*\s(?P<chunklist>[^\s]+)', manifest, re.DOTALL):
                 item = self.video_item()
                 item['surl'] = item['title']
@@ -237,7 +239,7 @@ class TA3ContentProvider(ContentProvider):
                     item['quality'] = '404p'
                 else:
                     item['quality'] = '???'
-                item['url'] = manifest_url[:manifest_url.rfind('/')+1] + m.group('chunklist')
+                item['url'] = manifest_url[:manifest_url.rfind('/') + 1] + m.group('chunklist')
                 resolved.append(item)
             # only first manifest url looks to be is valid
             break
